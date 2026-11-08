@@ -174,6 +174,48 @@ and `clean2_s5_after_by_class.png`.
 | `figures/` | `c2_*`, `c3_*`: blind-test headline figures; `clean2_*`: the label-cleaning results |
 | `code/` | the measurement path and the blind-test tooling |
 | `code/rrwrong/` | the learned Redrock-error filter, its validation, and the clean-2 builder (see its README) |
+| `code/build_h5/` | builds the two DR1 training files from the public DESI release: `ZWARN == 0` selection and official B/R/Z camera coaddition (below) |
+
+### Training data: `code/build_h5/`
+
+Every model is trained and tested on two HDF5 files built from DESI DR1
+(`iron`) by these two scripts. Clean-2 (`code/rrwrong/make_clean2_h5.py`) is a
+row-deleted copy of the same two files, not a separate source.
+
+| script | output | rows |
+|---|---|---|
+| `build_dr1_sv3_brz_h5.py` | `dr1_sv3_primary_tgt_zwarn0_brz.h5` | 992,821 |
+| `build_dr1_main_brz_h5_parallel.py` | `dr1_main_primary_tgt_zwarn0_brz.h5` | 18,659,804 |
+
+- **source**: `zcatalog/v1/zall-pix-iron.fits` for the selection, and the
+  healpix `coadd-<survey>-<program>-<healpix>.fits` files for the spectra, both
+  under `/global/cfs/cdirs/desi/public/dr1/spectro/redux/iron/`
+- **selection**: `SURVEY == "sv3"` (or `"main"`), `ZCAT_PRIMARY`,
+  `OBJTYPE == "TGT"`, `ZWARN == 0`; the scripts refuse to run if the selection
+  contains a repeated `TARGETID`
+- **spectra**: B, R and Z are combined with `desispec.coadd_cameras`
+  (desispec 0.68.1) into one 3,600–9,824 Å array, 0.8 Å per pixel, 7,781
+  pixels; `BRZ_FLUX`, `BRZ_IVAR` and `BRZ_MASK` are stored per row, the
+  wavelength grid once (its sha256 is checked across every coadd file)
+- **catalogue columns**: `TARGETID`, `Z`, `ZERR`, `SPECTYPE`, `ZWARN`,
+  `DELTACHI2`, target bits and the rest of `ZALL_FIELDS` in the sv3 script; the
+  main script renames `SV3_*_TARGET` to `*_TARGET` and `SV_PRIMARY` /
+  `SV_NSPEC` to `MAIN_PRIMARY` / `MAIN_NSPEC`
+- **main is parallel**: 64 processes write separate shards, which are merged
+  by copying compressed chunks and then verified chunk by chunk, with two rows
+  per shard recomputed from the source FITS. It imports the sv3 script for
+  selection and coaddition, so the two must sit in the same directory
+- **provenance**: each h5 records the sha256 of the script that built it
+  (`BUILD_SCRIPT_SHA256`, `ORIGINAL_SV3_SCRIPT_SHA256`); the files here match
+  those values
+
+These files are a labelled export, not a blind cohort: `ZCAT_PRIMARY` and
+`ZWARN` are Redrock-derived, and Redrock's `Z` is the training label. The
+blind protocol below governs the reading cohorts, not these files.
+
+Run on NERSC in an environment with `desispec`, `fitsio`, `astropy` and
+`h5py`. `--dry-run` (sv3) or `--prepare-only` (main) stops after the
+catalogue selection; both builds resume from where they stopped.
 
 ### Code
 
